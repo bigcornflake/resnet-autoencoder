@@ -302,6 +302,14 @@ class ResNetDecoder(nn.Module):
 
         return self.conv1(x)
 
+def resnet17_encoder(first_conv, maxpool1):
+    return ResNetEncoder(EncoderBlock, [1, 2, 2, 2], first_conv, maxpool1)
+
+
+def resnet17_decoder(latent_dim, input_height, first_conv, maxpool1):
+    return ResNetDecoder(DecoderBlock, [1, 2, 2, 2], latent_dim, input_height, first_conv, maxpool1)
+
+
 
 def resnet18_encoder(first_conv, maxpool1):
     return ResNetEncoder(EncoderBlock, [2, 2, 2, 2], first_conv, maxpool1)
@@ -341,7 +349,7 @@ class AE(LightningModule):
                 replace it with kernel_size 3, stride 1 conv
             maxpool1: use standard maxpool to reduce spatial dim of feat by a factor of 2
             enc_out_dim: set according to the out_channel count of
-                encoder used (512 for resnet18, 2048 for resnet50)
+                encoder used (512 for resnet18/17, 2048 for resnet50)
             latent_dim: dim of latent space
             lr: learning rate for Adam
         """
@@ -356,6 +364,10 @@ class AE(LightningModule):
         self.input_height = input_height
 
         valid_encoders = {
+            "resnet17": {
+                "enc": resnet17_encoder,
+                "dec": resnet17_decoder,
+            },
             "resnet18": {
                 "enc": resnet18_encoder,
                 "dec": resnet18_decoder,
