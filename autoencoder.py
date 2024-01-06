@@ -5,27 +5,12 @@ import torch
 from pytorch_lightning import LightningModule, Trainer
 from torch import nn
 from torch.nn import functional as F
+from modules import (
+    EncoderBlock, ResNetEncoder, DecoderBlock, ResNetDecoder,
+    resnet18_encoder, resnet18_decoder
+)
 
-
-@under_review()
 class AE(LightningModule):
-    """Standard AE.
-
-    Model is available pretrained on different datasets:
-
-    Example::
-
-        # not pretrained
-        ae = AE()
-
-        # pretrained on cifar10
-        ae = AE(input_height=32).from_pretrained('cifar10-resnet18')
-
-    """
-
-    pretrained_urls = {
-        "cifar10-resnet18": urllib.parse.urljoin(_HTTPS_AWS_HUB, "ae/ae-cifar10/checkpoints/epoch%3D96.ckpt"),
-    }
 
     def __init__(
         self,
@@ -80,15 +65,8 @@ class AE(LightningModule):
 
         self.fc = nn.Linear(self.enc_out_dim, self.latent_dim)
 
-    @staticmethod
-    def pretrained_weights_available():
-        return list(AE.pretrained_urls.keys())
-
-    def from_pretrained(self, checkpoint_name):
-        if checkpoint_name not in AE.pretrained_urls:
-            raise KeyError(str(checkpoint_name) + " not present in pretrained weights.")
-
-        return self.load_from_checkpoint(AE.pretrained_urls[checkpoint_name], strict=False)
+    def from_pretrained(self, ckpt_path):
+        return self.load_from_checkpoint(ckpt_path, strict=False)
 
     def forward(self, x):
         feats = self.encoder(x)
@@ -119,63 +97,3 @@ class AE(LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
-    @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = ArgumentParser(parents=[parent_parser], add_help=False)
-
-        parser.add_argument("--enc_type", type=str, default="resnet18", help="resnet18/resnet50")
-        parser.add_argument("--first_conv", action="store_true")
-        parser.add_argument("--maxpool1", action="store_true")
-        parser.add_argument("--lr", type=float, default=1e-4)
-
-        parser.add_argument(
-            "--enc_out_dim",
-            type=int,
-            default=512,
-            help="512 for resnet18, 2048 for bigger resnets, adjust for wider resnets",
-        )
-        parser.add_argument("--latent_dim", type=int, default=256)
-
-        parser.add_argument("--batch_size", type=int, default=256)
-        parser.add_argument("--num_workers", type=int, default=8)
-        parser.add_argument("--data_dir", type=str, default=".")
-
-        return parser
-
-
-@under_review()
-def cli_main(args=None):
-    from pl_bolts.datamodules import CIFAR10DataModule, ImagenetDataModule, STL10DataModule
-
-    parser = ArgumentParser()
-    parser.add_argument("--dataset", default="cifar10", type=str, choices=["cifar10", "stl10", "imagenet"])
-    script_args, _ = parser.parse_known_args(args)
-
-    if script_args.dataset == "cifar10":
-        dm_cls = CIFAR10DataModule
-    elif script_args.dataset == "stl10":
-        dm_cls = STL10DataModule
-    elif script_args.dataset == "imagenet":
-        dm_cls = ImagenetDataModule
-    else:
-        raise ValueError(f"undefined dataset {script_args.dataset}")
-
-    parser = AE.add_model_specific_args(parser)
-    parser = Trainer.add_argparse_args(parser)
-    args = parser.parse_args(args)
-
-    dm = dm_cls.from_argparse_args(args)
-    args.input_height = dm.dims[-1]
-
-    if args.max_steps == -1:
-        args.max_steps = None
-
-    model = AE(**vars(args))
-
-    trainer = Trainer.from_argparse_args(args)
-    trainer.fit(model, datamodule=dm)
-    return dm, model, trainer
-
-
-if __name__ == "__main__":
-    dm, model, trainer = cli_main()
